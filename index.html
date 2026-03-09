@@ -175,6 +175,18 @@
   .legend-item { display: flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 0.62rem; color: var(--text-2); }
   .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
 
+  .savings-goal-bar-wrap { background:var(--bg-3); border-radius:6px; height:10px; overflow:hidden; margin:0.8rem 0 0.5rem; }
+  .savings-goal-bar { height:100%; border-radius:6px; transition:width 0.6s ease, background 0.4s; }
+  .savings-goal-bar.ok { background: var(--green); }
+  .savings-goal-bar.warn { background: #ff9f43; }
+  .savings-goal-bar.danger { background: var(--red); }
+  .savings-stat { display:flex; justify-content:space-between; align-items:baseline; margin-top:0.6rem; }
+  .savings-stat-label { font-family:var(--mono); font-size:0.62rem; color:var(--text-3); }
+  .savings-stat-value { font-family:var(--mono); font-size:0.82rem; font-weight:700; }
+  .savings-stat-value.ok { color:var(--green); }
+  .savings-stat-value.warn { color:#ff9f43; }
+  .savings-stat-value.danger { color:var(--red); }
+
   html { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
   .toast { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--bg-3); border: 1px solid var(--accent-dim); color: var(--accent); font-family: var(--mono); font-size: 0.75rem; padding: 0.6rem 1.2rem; border-radius: 30px; opacity: 0; transition: all 0.3s; z-index: 999; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -292,6 +304,43 @@
       </div>
     </div>
     <div class="panel">
+      <div class="panel-header"><span class="panel-title">Meta de Ahorro Mensual</span></div>
+      <div style="padding:1.2rem 1.4rem;">
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label class="form-label">Quiero ahorrar este mes ($)</label>
+          <div style="display:flex;gap:0.5rem;">
+            <input class="form-control" id="savings-goal-input" type="number" min="0" step="0.01" placeholder="0.00" style="flex:1;">
+            <button class="btn-add" onclick="saveSavingsGoal()" style="margin-top:0;padding:0.6rem 1rem;white-space:nowrap;">Guardar</button>
+          </div>
+        </div>
+        <div id="savings-goal-result" style="display:none;">
+          <div class="savings-stat">
+            <span class="savings-stat-label">Ingresos del mes</span>
+            <span class="savings-stat-value" id="sg-income" style="color:var(--text-2);"></span>
+          </div>
+          <div class="savings-stat">
+            <span class="savings-stat-label">Puedes gastar hasta</span>
+            <span class="savings-stat-value ok" id="sg-spendable"></span>
+          </div>
+          <div class="savings-goal-bar-wrap">
+            <div class="savings-goal-bar ok" id="sg-bar" style="width:0%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:var(--mono);font-size:0.62rem;color:var(--text-3);">Gastado: <span id="sg-spent"></span></span>
+            <span class="savings-stat-value" id="sg-pct" style="font-size:1rem;"></span>
+          </div>
+          <div class="savings-stat" style="margin-top:0.8rem;padding-top:0.8rem;border-top:1px solid var(--border);">
+            <span class="savings-stat-label">Te queda disponible</span>
+            <span class="savings-stat-value" id="sg-remaining"></span>
+          </div>
+        </div>
+        <div id="savings-goal-empty" style="font-family:var(--mono);font-size:0.72rem;color:var(--text-3);text-align:center;padding:0.5rem 0;">
+          Introduce tu meta para ver cuánto puedes gastar
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
       <div class="panel-header"><span class="panel-title">Gastos por Categoría</span></div>
       <div style="padding:1rem 1.2rem;" id="category-bars"></div>
     </div>
@@ -341,6 +390,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   updateDateDisplay(); setInterval(updateDateDisplay, 60000);
   initCharts(); render();
+  const savedGoal = localStorage.getItem('fintrack_savings_goal');
+  if (savedGoal) document.getElementById('savings-goal-input').value = savedGoal;
   startRealtimeSync();
 });
 
@@ -429,7 +480,51 @@ async function deleteTransaction(docId) {
   } catch(e) { setSyncStatus('error','Error al eliminar'); }
 }
 
-function render() { updateMonthLabel(); renderSummary(); renderTransactions(); renderCharts(); renderCategoryBars(); }
+function saveSavingsGoal() {
+  const val = parseFloat(document.getElementById('savings-goal-input').value);
+  if (!val || val < 0) { showToast('⚠ Introduce una cantidad válida'); return; }
+  localStorage.setItem('fintrack_savings_goal', val);
+  showToast('✓ Meta guardada');
+  renderSavingsGoal();
+}
+
+function renderSavingsGoal() {
+  const goal = parseFloat(localStorage.getItem('fintrack_savings_goal'));
+  const resultEl = document.getElementById('savings-goal-result');
+  const emptyEl = document.getElementById('savings-goal-empty');
+  if (!goal || goal <= 0) { resultEl.style.display='none'; emptyEl.style.display='block'; return; }
+
+  document.getElementById('savings-goal-input').value = goal;
+
+  const txs = getMonthTxs();
+  const income = txs.filter(t=>t.type==='income').reduce((a,b)=>a+b.amount, 0);
+  const expenses = txs.filter(t=>t.type==='expense').reduce((a,b)=>a+b.amount, 0);
+  const spendable = income - goal;
+  const remaining = spendable - expenses;
+  const pct = spendable > 0 ? Math.min((expenses / spendable) * 100, 100) : 100;
+
+  const state = pct < 70 ? 'ok' : pct < 90 ? 'warn' : 'danger';
+
+  resultEl.style.display = 'block';
+  emptyEl.style.display = 'none';
+
+  document.getElementById('sg-income').textContent = fmt(income);
+  document.getElementById('sg-spendable').textContent = spendable > 0 ? fmt(spendable) : '—';
+  document.getElementById('sg-spendable').className = 'savings-stat-value ' + (spendable > 0 ? 'ok' : 'danger');
+  document.getElementById('sg-spent').textContent = fmt(expenses);
+  document.getElementById('sg-pct').textContent = pct.toFixed(1) + '%';
+  document.getElementById('sg-pct').className = 'savings-stat-value ' + state;
+
+  const bar = document.getElementById('sg-bar');
+  bar.style.width = pct + '%';
+  bar.className = 'savings-goal-bar ' + state;
+
+  const remEl = document.getElementById('sg-remaining');
+  remEl.textContent = remaining >= 0 ? fmt(remaining) : '−' + fmt(Math.abs(remaining));
+  remEl.className = 'savings-stat-value ' + (remaining >= 0 ? state : 'danger');
+}
+
+function render() { updateMonthLabel(); renderSummary(); renderTransactions(); renderCharts(); renderCategoryBars(); renderSavingsGoal(); }
 
 function changeMonth(dir) {
   currentMonth+=dir;
