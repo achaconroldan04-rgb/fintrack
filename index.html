@@ -62,65 +62,6 @@
   }
   .logo span { color: var(--accent); }
 
-  .sync-badge {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    padding: 0.25rem 0.7rem;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    color: var(--text-3);
-    transition: all 0.3s;
-  }
-  .sync-badge.connected { border-color: rgba(61,255,160,0.3); color: var(--green); background: rgba(61,255,160,0.07); }
-  .sync-badge.syncing { border-color: rgba(200,240,74,0.3); color: var(--accent); background: var(--accent-glow); }
-  .sync-badge.error { border-color: rgba(255,77,106,0.3); color: var(--red); background: var(--red-dim); }
-  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-  .sync-badge.connected .sync-dot { animation: pulse-dot 2s infinite; }
-  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-  .setup-overlay {
-    position: fixed; inset: 0;
-    background: rgba(10,10,15,0.96);
-    z-index: 999;
-    display: flex; align-items: center; justify-content: center;
-    padding: 1.5rem;
-    backdrop-filter: blur(8px);
-  }
-  .setup-overlay.hidden { display: none; }
-  .setup-card {
-    background: var(--bg-2); border: 1px solid var(--border);
-    border-radius: 20px; padding: 2.5rem; max-width: 520px; width: 100%;
-  }
-  .setup-title { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0.4rem; }
-  .setup-title span { color: var(--accent); }
-  .setup-sub { color: var(--text-2); font-size: 0.82rem; line-height: 1.6; margin-bottom: 1.8rem; }
-  .setup-steps { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1.8rem; }
-  .setup-step { display: flex; gap: 0.8rem; align-items: flex-start; font-size: 0.8rem; color: var(--text-2); line-height: 1.5; }
-  .step-num {
-    background: var(--accent-glow); border: 1px solid rgba(200,240,74,0.2);
-    color: var(--accent); font-family: var(--mono); font-size: 0.65rem; font-weight: 700;
-    width: 22px; height: 22px; border-radius: 6px;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
-  }
-  .setup-step a { color: var(--accent); text-decoration: none; }
-  .setup-step a:hover { text-decoration: underline; }
-  .setup-step code {
-    background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 4px; padding: 1px 5px;
-    font-family: var(--mono); font-size: 0.72rem; color: var(--text-1);
-  }
-  .setup-textarea {
-    width: 100%; background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 10px; padding: 0.9rem 1rem; color: var(--text-1);
-    font-family: var(--mono); font-size: 0.72rem; line-height: 1.6;
-    height: 140px; resize: vertical; outline: none; transition: border-color 0.2s; margin-bottom: 1rem;
-  }
-  .setup-textarea:focus { border-color: var(--accent-dim); }
-  .setup-error { color: var(--red); font-family: var(--mono); font-size: 0.7rem; margin-bottom: 0.8rem; display: none; }
-  .setup-error.visible { display: block; }
 
   .header-meta { font-family: var(--mono); font-size: 0.7rem; color: var(--text-3); text-align: right; }
   #live-date { color: var(--text-2); }
@@ -231,18 +172,12 @@
   @media (max-width: 1050px) { main { grid-template-columns: 1fr; } .right-col { order: -1; } .summary-grid { grid-template-columns: repeat(2,1fr); } }
   @media (max-width: 600px) { .summary-grid { grid-template-columns: 1fr 1fr; } .charts-grid { grid-template-columns: 1fr; } header { padding: 1rem; } }
 </style>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
 <header>
   <div class="logo">Fin<span>Track</span></div>
   <div style="display:flex;align-items:center;gap:1rem;">
-    <div class="sync-badge" id="sync-badge">
-      <div class="sync-dot"></div>
-      <span id="sync-label">Sin conexión</span>
-    </div>
     <div class="header-meta">
       <div id="live-date"></div>
       <div style="margin-top:2px;">Control Financiero Personal</div>
@@ -250,29 +185,6 @@
   </div>
 </header>
 
-<div class="setup-overlay" id="setup-overlay">
-  <div class="setup-card">
-    <div class="setup-title">Conecta tu <span>Firebase</span></div>
-    <p class="setup-sub">Para sincronizar datos entre tu ordenador y tu iPhone necesitas una base de datos. Firebase es gratis y tarda 5 minutos en configurar.</p>
-    <div class="setup-steps">
-      <div class="setup-step"><div class="step-num">1</div><span>Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> e inicia sesión con tu cuenta Google.</span></div>
-      <div class="setup-step"><div class="step-num">2</div><span>Crea un proyecto nuevo → dale un nombre → desactiva Google Analytics → <strong>Crear proyecto</strong>.</span></div>
-      <div class="setup-step"><div class="step-num">3</div><span>En el proyecto: icono <code>&lt;/&gt;</code> (Web) → registra la app → copia el objeto <code>firebaseConfig</code> que aparece.</span></div>
-      <div class="setup-step"><div class="step-num">4</div><span>Ve a <strong>Firestore Database</strong> → <strong>Crear base de datos</strong> → modo <strong>prueba</strong> → elegir región → <strong>Listo</strong>.</span></div>
-      <div class="setup-step"><div class="step-num">5</div><span>Pega aquí el objeto <code>firebaseConfig</code> completo (incluyendo las llaves <code>{ }</code>):</span></div>
-    </div>
-    <textarea class="setup-textarea" id="setup-config" placeholder='{
-  apiKey: "AIza...",
-  authDomain: "mi-proyecto.firebaseapp.com",
-  projectId: "mi-proyecto",
-  storageBucket: "mi-proyecto.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123:web:abc"
-}'></textarea>
-    <div class="setup-error" id="setup-error">⚠ Config inválida. Asegúrate de pegar el objeto completo tal como aparece en Firebase.</div>
-    <button class="btn-add" onclick="connectFirebase()" style="width:100%;">Conectar y guardar →</button>
-  </div>
-</div>
 
 <main>
   <div class="left-col">
@@ -378,46 +290,17 @@
 <div class="toast" id="toast"></div>
 
 <script>
-let db = null, unsubscribe = null;
-
-function connectFirebase() {
-  const raw = document.getElementById('setup-config').value.trim();
-  const errEl = document.getElementById('setup-error');
-  errEl.classList.remove('visible');
-  try {
-    const cleaned = raw.replace(/\/\/.*/g,'').replace(/([{,]\s*)(\w+)\s*:/g,'$1"$2":').replace(/'/g,'"');
-    const config = JSON.parse(cleaned);
-    if (!config.apiKey || !config.projectId) throw new Error('Missing fields');
-    localStorage.setItem('fintrack_fb_config', JSON.stringify(config));
-    initFirebase(config);
-  } catch(e) { errEl.classList.add('visible'); }
-}
-
-function initFirebase(config) {
-  try {
-    if (!firebase.apps.length) firebase.initializeApp(config);
-    db = firebase.firestore();
-    document.getElementById('setup-overlay').classList.add('hidden');
-    setSyncStatus('syncing', 'Conectando...');
-    startRealtimeSync();
-  } catch(e) { setSyncStatus('error', 'Error'); console.error(e); }
-}
-
-function startRealtimeSync() {
-  if (unsubscribe) unsubscribe();
-  unsubscribe = db.collection('transactions').orderBy('id','desc').onSnapshot(snapshot => {
-    transactions = snapshot.docs.map(d => ({ ...d.data(), _docId: d.id }));
-    setSyncStatus('connected', 'Sincronizado');
-    render();
-  }, err => { setSyncStatus('error', 'Error sync'); console.error(err); });
-}
-
-function setSyncStatus(state, label) {
-  document.getElementById('sync-badge').className = 'sync-badge ' + state;
-  document.getElementById('sync-label').textContent = label;
-}
-
 let transactions = [], currentType = 'income', currentFilter = 'all', currentPeriod = 'all';
+
+function loadTransactions() {
+  const saved = localStorage.getItem('fintrack_transactions');
+  transactions = saved ? JSON.parse(saved) : [];
+  render();
+}
+
+function saveTransactions() {
+  localStorage.setItem('fintrack_transactions', JSON.stringify(transactions));
+}
 let currentMonth = new Date().getMonth(), currentYear = new Date().getFullYear();
 let pieChartInst, barChartInst;
 
@@ -427,9 +310,7 @@ const CHART_COLORS = ['#c8f04a','#3dffa0','#7b68ee','#ff9f43','#54a0ff','#ff6b81
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   updateDateDisplay(); setInterval(updateDateDisplay, 60000);
-  initCharts(); render();
-  const saved = localStorage.getItem('fintrack_fb_config');
-  if (saved) { try { initFirebase(JSON.parse(saved)); } catch(e) {} }
+  initCharts(); loadTransactions();
 });
 
 function updateDateDisplay() {
@@ -495,26 +376,25 @@ function getPeriodDates() {
   return null;
 }
 
-async function addTransaction() {
+function addTransaction() {
   const desc=document.getElementById('f-desc').value.trim(), amount=parseFloat(document.getElementById('f-amount').value);
   const date=document.getElementById('f-date').value, category=document.getElementById('f-category').value;
   if (!desc) { showToast('⚠ Ingresa una descripción'); return; }
   if (!amount||amount<=0) { showToast('⚠ Ingresa un monto válido'); return; }
   if (!date) { showToast('⚠ Selecciona una fecha'); return; }
-  if (!db) { showToast('⚠ Sin conexión a Firebase'); return; }
-  setSyncStatus('syncing','Guardando...');
-  try {
-    await db.collection('transactions').add({id:Date.now(),type:currentType,desc,amount,date,category});
-    document.getElementById('f-desc').value=''; document.getElementById('f-amount').value='';
-    showToast('✓ Transacción guardada');
-  } catch(e) { setSyncStatus('error','Error al guardar'); showToast('✗ Error al guardar'); }
+  const tx = {id:Date.now(), type:currentType, desc, amount, date, category};
+  transactions.unshift(tx);
+  saveTransactions();
+  document.getElementById('f-desc').value=''; document.getElementById('f-amount').value='';
+  showToast('✓ Transacción guardada');
+  render();
 }
 
-async function deleteTransaction(docId) {
-  if (!db) return;
-  setSyncStatus('syncing','Eliminando...');
-  try { await db.collection('transactions').doc(docId).delete(); showToast('Transacción eliminada'); }
-  catch(e) { setSyncStatus('error','Error al eliminar'); }
+function deleteTransaction(docId) {
+  transactions = transactions.filter(t => String(t.id) !== String(docId));
+  saveTransactions();
+  showToast('Transacción eliminada');
+  render();
 }
 
 function render() { updateMonthLabel(); renderSummary(); renderTransactions(); renderCharts(); renderCategoryBars(); }
@@ -564,7 +444,7 @@ function renderTransactions() {
       <div class="tx-icon ${t.type}">${CATEGORY_ICONS[t.category]||'✳️'}</div>
       <div class="tx-info"><div class="tx-desc">${t.desc}</div><div class="tx-meta"><span class="tx-tag">${t.category}</span>${formatDate(t.date)}</div></div>
       <div class="tx-amount ${t.type}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div>
-      <button class="tx-delete" onclick="deleteTransaction('${t._docId}')" title="Eliminar">✕</button>
+      <button class="tx-delete" onclick="deleteTransaction('${t.id}')" title="Eliminar">✕</button>
     </div>`).join('');
 }
 function formatDate(d) { return new Date(d+'T00:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}); }
