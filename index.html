@@ -6,6 +6,8 @@
 <title>FinTrack — Control Financiero</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --bg-0: #0a0a0f;
@@ -62,6 +64,14 @@
   }
   .logo span { color: var(--accent); }
 
+
+  .sync-badge { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:0.65rem; padding:0.25rem 0.7rem; border-radius:20px; border:1px solid var(--border); color:var(--text-3); transition:all 0.3s; }
+  .sync-badge.connected { border-color:rgba(61,255,160,0.3); color:var(--green); background:rgba(61,255,160,0.07); }
+  .sync-badge.syncing { border-color:rgba(200,240,74,0.3); color:var(--accent); background:var(--accent-glow); }
+  .sync-badge.error { border-color:rgba(255,77,106,0.3); color:var(--red); background:var(--red-dim); }
+  .sync-dot { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; }
+  .sync-badge.connected .sync-dot { animation:pulse-dot 2s infinite; }
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
   .header-meta { font-family: var(--mono); font-size: 0.7rem; color: var(--text-3); text-align: right; }
   #live-date { color: var(--text-2); }
@@ -178,6 +188,7 @@
 <header>
   <div class="logo">Fin<span>Track</span></div>
   <div style="display:flex;align-items:center;gap:1rem;">
+    <div class="sync-badge syncing" id="sync-badge"><div class="sync-dot"></div><span id="sync-label">Conectando...</span></div>
     <div class="header-meta">
       <div id="live-date"></div>
       <div style="margin-top:2px;">Control Financiero Personal</div>
@@ -290,16 +301,35 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ── Firebase config embebida ──────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyDvCvLFERJ__s3HVPGXpPiucPok8Ys2CI4",
+  authDomain: "fintrack-sync-ff309.firebaseapp.com",
+  projectId: "fintrack-sync-ff309",
+  storageBucket: "fintrack-sync-ff309.firebasestorage.app",
+  messagingSenderId: "917542378190",
+  appId: "1:917542378190:web:6e3b3845d69a02756b0e9f"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+// ─────────────────────────────────────────────────────────────────────────
+
 let transactions = [], currentType = 'income', currentFilter = 'all', currentPeriod = 'all';
 
-function loadTransactions() {
-  const saved = localStorage.getItem('fintrack_transactions');
-  transactions = saved ? JSON.parse(saved) : [];
-  render();
+function setSyncStatus(state, label) {
+  document.getElementById('sync-badge').className = 'sync-badge ' + state;
+  document.getElementById('sync-label').textContent = label;
 }
 
-function saveTransactions() {
-  localStorage.setItem('fintrack_transactions', JSON.stringify(transactions));
+function startRealtimeSync() {
+  db.collection('transactions').orderBy('id', 'desc').onSnapshot(snapshot => {
+    transactions = snapshot.docs.map(d => ({ ...d.data(), _docId: d.id }));
+    setSyncStatus('connected', 'Sincronizado');
+    render();
+  }, err => {
+    setSyncStatus('error', 'Error sync');
+    console.error(err);
+  });
 }
 let currentMonth = new Date().getMonth(), currentYear = new Date().getFullYear();
 let pieChartInst, barChartInst;
@@ -310,7 +340,8 @@ const CHART_COLORS = ['#c8f04a','#3dffa0','#7b68ee','#ff9f43','#54a0ff','#ff6b81
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   updateDateDisplay(); setInterval(updateDateDisplay, 60000);
-  initCharts(); loadTransactions();
+  initCharts(); render();
+  startRealtimeSync();
 });
 
 function updateDateDisplay() {
@@ -376,25 +407,26 @@ function getPeriodDates() {
   return null;
 }
 
-function addTransaction() {
+async function addTransaction() {
   const desc=document.getElementById('f-desc').value.trim(), amount=parseFloat(document.getElementById('f-amount').value);
   const date=document.getElementById('f-date').value, category=document.getElementById('f-category').value;
   if (!desc) { showToast('⚠ Ingresa una descripción'); return; }
   if (!amount||amount<=0) { showToast('⚠ Ingresa un monto válido'); return; }
   if (!date) { showToast('⚠ Selecciona una fecha'); return; }
-  const tx = {id:Date.now(), type:currentType, desc, amount, date, category};
-  transactions.unshift(tx);
-  saveTransactions();
-  document.getElementById('f-desc').value=''; document.getElementById('f-amount').value='';
-  showToast('✓ Transacción guardada');
-  render();
+  setSyncStatus('syncing', 'Guardando...');
+  try {
+    await db.collection('transactions').add({id:Date.now(), type:currentType, desc, amount, date, category});
+    document.getElementById('f-desc').value=''; document.getElementById('f-amount').value='';
+    showToast('✓ Transacción guardada');
+  } catch(e) { setSyncStatus('error','Error al guardar'); showToast('✗ Error al guardar'); }
 }
 
-function deleteTransaction(docId) {
-  transactions = transactions.filter(t => String(t.id) !== String(docId));
-  saveTransactions();
-  showToast('Transacción eliminada');
-  render();
+async function deleteTransaction(docId) {
+  setSyncStatus('syncing', 'Eliminando...');
+  try {
+    await db.collection('transactions').doc(docId).delete();
+    showToast('Transacción eliminada');
+  } catch(e) { setSyncStatus('error','Error al eliminar'); }
 }
 
 function render() { updateMonthLabel(); renderSummary(); renderTransactions(); renderCharts(); renderCategoryBars(); }
@@ -444,7 +476,7 @@ function renderTransactions() {
       <div class="tx-icon ${t.type}">${CATEGORY_ICONS[t.category]||'✳️'}</div>
       <div class="tx-info"><div class="tx-desc">${t.desc}</div><div class="tx-meta"><span class="tx-tag">${t.category}</span>${formatDate(t.date)}</div></div>
       <div class="tx-amount ${t.type}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div>
-      <button class="tx-delete" onclick="deleteTransaction('${t.id}')" title="Eliminar">✕</button>
+      <button class="tx-delete" onclick="deleteTransaction('${t._docId}')" title="Eliminar">✕</button>
     </div>`).join('');
 }
 function formatDate(d) { return new Date(d+'T00:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'}); }
